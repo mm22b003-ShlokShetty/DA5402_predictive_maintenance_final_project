@@ -1,0 +1,125 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  airflow-init:
+    image: apache/airflow:2.9.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_USER}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_PASSWORD}
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate &&
+        airflow users create \
+          --username ${AIRFLOW_USER} \
+          --password ${AIRFLOW_PASSWORD} \
+          --firstname Air --lastname Flow \
+          --role Admin \
+          --email admin@example.com
+    restart: on-failure
+
+  airflow-webserver:
+    image: apache/airflow:2.9.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/config:/opt/airflow/config
+      - ./data:/opt/airflow/data
+    ports:
+      - "8080:8080"
+    command: webserver
+    restart: always
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/config:/opt/airflow/config
+      - ./data:/opt/airflow/data
+    command: scheduler
+    restart: always
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.13.0
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlflow-data:/mlflow
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+    restart: always
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    restart: always
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    restart: always
+
+volumes:
+  postgres-data:
+  grafana-data:
