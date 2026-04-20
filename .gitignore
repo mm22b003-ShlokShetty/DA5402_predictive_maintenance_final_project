@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+
+# Env
+.env
+
+# Data (DVC will track these)
+data/raw/
+data/processed/
+data/features/
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Airflow
+airflow/logs/
+airflow/__pycache__/
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
