@@ -1,0 +1,6 @@
+outs:
+- md5: 5f4ec7eba918e3d3f48b86bca94187e0.dir
+  size: 80402227
+  nfiles: 5
+  hash: md5
+  path: azure

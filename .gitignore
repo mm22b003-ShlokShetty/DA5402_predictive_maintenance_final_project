@@ -9,9 +9,12 @@ dist/
 .env
 
 # Data (DVC will track these)
-data/raw/
-data/processed/
-data/features/
+data/raw/**
+data/processed/**
+data/features/**
+!data/raw/*.dvc
+!data/processed/*.dvc
+!data/features/*.dvc
 
 # MLflow
 mlruns/
