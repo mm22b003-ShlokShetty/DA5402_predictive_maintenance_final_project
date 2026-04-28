@@ -4,18 +4,14 @@ import pandas as pd
 import numpy as np
 from xgboost import XGBClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import (
-    classification_report, roc_auc_score,
-    average_precision_score, confusion_matrix
-)
-from sklearn.utils.class_weight import compute_sample_weight
+from sklearn.metrics import classification_report, roc_auc_score, average_precision_score, confusion_matrix
 import pyarrow.parquet as pq
-import json
 import os
 
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
 FEATURES_DIR = "data/features"
 EXPERIMENT_NAME = "pdm_failure_prediction"
+THRESHOLD = 0.7
 
 FEATURE_COLS = [
     "volt_mean_3h", "volt_std_3h", "volt_mean_24h", "volt_std_24h", "volt_min_24h", "volt_max_24h",
@@ -60,6 +56,14 @@ def get_git_commit():
 
 def main():
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+
+    client = mlflow.tracking.MlflowClient()
+    exp = client.get_experiment_by_name(EXPERIMENT_NAME)
+    if exp is None:
+        client.create_experiment(
+            EXPERIMENT_NAME,
+            artifact_location = "file:///" + os.path.abspath("mlflow-data/artifacts").replace("\\", "/")
+        )
     mlflow.set_experiment(EXPERIMENT_NAME)
 
     print("Loading features...")
@@ -72,13 +76,12 @@ def main():
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    # sample_weights = compute_sample_weight(class_weight="balanced", y=y_train)
-
     print(f"Train: {len(X_train)} | Test: {len(X_test)}")
     print(f"Failure rate train: {y_train.mean():.4f} | test: {y_test.mean():.4f}")
 
     with mlflow.start_run(run_name="xgboost_final_spw10_thres0.7") as run:
         mlflow.log_params(PARAMS)
+        mlflow.log_param("threshold", THRESHOLD)
         mlflow.log_param("failure_window_hours", 24)
         mlflow.log_param("train_size", len(X_train))
         mlflow.log_param("test_size", len(X_test))
@@ -86,22 +89,21 @@ def main():
         mlflow.log_param("git_commit", get_git_commit())
         mlflow.log_param("dataset", "azure_pdm")
         mlflow.log_param("feature_version", "v1_rolling_windows")
+        mlflow.log_param("class_0_train", int((y_train == 0).sum()))
+        mlflow.log_param("class_1_train", int((y_train == 1).sum()))
 
         print("Training XGBoost...")
         model = XGBClassifier(**PARAMS)
-        model.fit(X_train, y_train)  # sample_weight=sample_weights
+        model.fit(X_train, y_train)
 
-        y_pred = model.predict(X_test)
         y_prob = model.predict_proba(X_test)[:, 1]
-        THRESHOLD = 0.7  # tune this
         y_pred = (y_prob >= THRESHOLD).astype(int)
 
-        roc_auc   = roc_auc_score(y_test, y_prob)
-        pr_auc    = average_precision_score(y_test, y_prob)
-        report    = classification_report(y_test, y_pred, output_dict=True)
-        cm        = confusion_matrix(y_test, y_pred)
+        roc_auc = roc_auc_score(y_test, y_prob)
+        pr_auc  = average_precision_score(y_test, y_prob)
+        report  = classification_report(y_test, y_pred, output_dict=True)
+        cm      = confusion_matrix(y_test, y_pred)
 
-        mlflow.log_param("threshold", THRESHOLD)
         mlflow.log_metric("roc_auc",   roc_auc)
         mlflow.log_metric("pr_auc",    pr_auc)
         mlflow.log_metric("precision", report["1"]["precision"])
@@ -121,24 +123,15 @@ def main():
         baseline_df = load_drift_baseline()
         mlflow.log_dict(baseline_df.to_dict(), "drift_baseline.json")
 
-        mlflow.log_param("class_0_train", int((y_train == 0).sum()))
-        mlflow.log_param("class_1_train", int((y_train == 1).sum()))
-
-        mlflow.xgboost.log_model(
+        mlflow.sklearn.log_model(
             model,
             artifact_path="model",
             input_example=X_test.iloc[:5],
         )
 
-        client = mlflow.tracking.MlflowClient()
-        try:
-            client.create_registered_model("pdm_failure_classifier")
-        except Exception:
-            pass
-        client.create_model_version(
-            name="pdm_failure_classifier",
-            source=f"{run.info.artifact_uri}/model",
-            run_id=run.info.run_id,
+        mlflow.register_model(
+            f"runs:/{run.info.run_id}/model",
+            "pdm_failure_classifier"
         )
 
         print(f"\nRun ID: {run.info.run_id}")

@@ -1,4 +1,5 @@
 services:
+
   postgres:
     image: postgres:15
     environment:
@@ -120,6 +121,21 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    restart: always
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MODEL_NAME: pdm_failure_classifier
+      THRESHOLD: "0.7"
+      DRIFT_BASELINE_PATH: /app/data/drift_baseline.csv
+    volumes:
+      - ./data/features:/app/data
+      - ./mlflow-data:/mlflow-data
+    depends_on:
+      - mlflow
     restart: always
 
 volumes:
