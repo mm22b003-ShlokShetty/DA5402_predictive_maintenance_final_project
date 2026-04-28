@@ -7,6 +7,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
+from collections import deque
+import threading
 import mlflow
 import mlflow.sklearn
 
@@ -44,6 +46,8 @@ app.add_middleware(
 model = None
 model_version = None
 drift_baseline = None
+prediction_buffer = deque(maxlen=1000)
+buffer_lock = threading.Lock()
 
 
 def load_model():
@@ -71,6 +75,8 @@ def load_drift_baseline():
         print(f"Drift baseline not found at {DRIFT_BASELINE_PATH}")
 
 
+
+
 @app.on_event("startup")
 async def startup():
     load_drift_baseline()
@@ -96,6 +102,8 @@ def make_prediction(record: SensorReading) -> PredictionResponse:
     prob = float(model.predict_proba(df)[0][1])
     predicted = prob >= THRESHOLD
     FAILURE_PREDICTIONS.labels(predicted=str(predicted)).inc()
+    with buffer_lock:
+        prediction_buffer.append(df.iloc[0].to_dict())
     return PredictionResponse(
         machineID=record.machineID,
         failure_probability=round(prob, 4),
@@ -153,22 +161,49 @@ def predict_batch(batch: BatchRequest):
         PREDICTION_LATENCY.labels(endpoint="/predict/batch").observe(time.time() - start)
 
 
+
 @app.get("/drift/status", response_model=DriftResponse)
 def drift_status():
     if drift_baseline is None:
         raise HTTPException(status_code=503, detail="Drift baseline not loaded")
-    drifted_features = []
-    psi_scores = {}
-    baseline_means = drift_baseline[drift_baseline["summary"] == "mean"]
-    baseline_stds  = drift_baseline[drift_baseline["summary"] == "stddev"]
+
+    with buffer_lock:
+        buffer_snapshot = list(prediction_buffer)
+
     sensor_cols = [c for c in FEATURE_COLS if any(s in c for s in ["volt", "rotate", "pressure", "vibration"])]
-    for col in sensor_cols:
-        if col in baseline_means.columns:
-            mean = float(baseline_means[col].values[0])
-            std  = float(baseline_stds[col].values[0]) if col in baseline_stds.columns else 1.0
-            psi  = abs(mean - mean) / (std + 1e-9)
-            psi_scores[col] = round(psi, 4)
+    baseline_means = drift_baseline[drift_baseline["summary"] == "mean"]
+    baseline_stds = drift_baseline[drift_baseline["summary"] == "stddev"]
+
+    psi_scores = {}
+    drifted_features = []
+    PSI_THRESHOLD = 0.2
+
+    if len(buffer_snapshot) < 10:
+        for col in sensor_cols:
+            psi_scores[col] = 0.0
+    else:
+        recent_df = pd.DataFrame(buffer_snapshot)
+        for col in sensor_cols:
+            if col not in baseline_means.columns:
+                continue
+            baseline_mean = float(baseline_means[col].values[0])
+            baseline_std = float(baseline_stds[col].values[0]) if col in baseline_stds.columns else 1.0
+            if baseline_std == 0:
+                baseline_std = 1e-9
+            current_mean = float(recent_df[col].mean())
+            current_std = float(recent_df[col].std()) if len(recent_df) > 1 else 0.0
+            mean_shift = abs(current_mean - baseline_mean) / baseline_std
+            std_shift = abs(current_std - baseline_std) / (baseline_std + 1e-9)
+            psi = round((mean_shift + std_shift) / 2, 4)
+            psi_scores[col] = psi
+            if psi > PSI_THRESHOLD:
+                drifted_features.append(col)
+                DRIFT_DETECTED.labels(feature=col).set(1)
+            else:
+                DRIFT_DETECTED.labels(feature=col).set(0)
+
     DRIFT_DETECTED.labels(feature="any").set(len(drifted_features) > 0)
+
     return DriftResponse(
         drifted=len(drifted_features) > 0,
         features_checked=len(sensor_cols),
