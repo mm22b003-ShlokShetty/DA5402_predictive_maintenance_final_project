@@ -460,13 +460,7 @@ Predictive_maintenance_project/
 
 ## Documentation
 
-Full project documentation (HLD, LLD, architecture, test plan, user manual) is in `docs/report.tex`. Compile with:
-
-```bash
-pdflatex docs/report.tex
-```
-
-Or upload to [Overleaf](https://overleaf.com).
+Documentation is present in Assignment_report in project root
 
 ---
 
