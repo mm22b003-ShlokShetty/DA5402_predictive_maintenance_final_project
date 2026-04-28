@@ -1,6 +1,8 @@
 # Predictive Maintenance MLOps Platform
+## Name - Shlok Shetty
+## Roll - MM22B003
 
-An end-to-end MLOps platform for industrial equipment failure prediction, built for DA5402 (MLOps) at IIT Madras. The system predicts equipment failure within a 24-hour window using multivariate sensor telemetry, exposing predictions via a REST API and an operator-facing dashboard.
+An end-to-end MLOps platform for industrial equipment failure prediction. The system predicts equipment failure within a 24-hour window using multivariate sensor telemetry, exposing predictions via a REST API and an operator-facing dashboard.
 
 ---
 
@@ -471,9 +473,3 @@ Documentation is present in Assignment_report in project root
 3. Dashboard SCAN ALL UNITS uses randomized sensor values — a production deployment would pipe live telemetry.
 4. Automated retraining on drift is designed but not implemented.
 
----
-
-## Course
-
-DA5402 — MLOps, IIT Madras
-Student: Shlok Shetty (mm22b003)
