@@ -145,6 +145,31 @@ services:
     volumes:
       - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
     restart: always
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    restart: always
+  mlflow-serve:
+    image: ghcr.io/mlflow/mlflow:v2.13.0
+    ports:
+      - "8001:8001"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MODEL_VERSION: ${SERVE_MODEL_VERSION:-2}
+    volumes:
+      - ./mlflow-data:/mlflow-data
+    command: >
+      mlflow models serve
+      -m /mlflow-data/artifacts/95eb0b34dfb3472d95bd6e363dae0715/artifacts/model
+      --host 0.0.0.0
+      --port 8001
+      --no-conda
+    depends_on:
+      - mlflow
+    restart: always
 
 volumes:
   postgres-data:

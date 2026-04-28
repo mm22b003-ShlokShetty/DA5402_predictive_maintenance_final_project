@@ -51,19 +51,16 @@ buffer_lock = threading.Lock()
 
 
 def load_model():
-    global model, model_version
+    global model, model_version, run_id
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     client = mlflow.tracking.MlflowClient()
-    versions = client.get_latest_versions(MODEL_NAME)
-    if not versions:
-        raise RuntimeError(f"No versions found for model {MODEL_NAME}")
-    latest = versions[-1]
-    model_version = latest.version
-    run_id = latest.run_id
+    version_info = client.get_model_version_by_alias(MODEL_NAME, "production")
+    model_version = version_info.version
+    run_id = version_info.run_id
     model_path = f"/mlflow-data/artifacts/{run_id}/artifacts/model"
     model = mlflow.sklearn.load_model(model_path)
     MODEL_LOADED.set(1)
-    print(f"Model {MODEL_NAME} v{model_version} loaded from {model_path}")
+    print(f"Model {MODEL_NAME} v{model_version} run {run_id} loaded.")
 
 
 def load_drift_baseline():
@@ -221,6 +218,13 @@ def model_info():
         threshold=THRESHOLD,
         feature_count=len(FEATURE_COLS),
     )
+@app.post("/model/reload")
+def reload_model():
+    try:
+        load_model()
+        return {"status": "reloaded", "version": model_version, "run_id": run_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/metrics")
