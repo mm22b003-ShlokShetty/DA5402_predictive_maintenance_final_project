@@ -1,0 +1,19 @@
+stages:
+  feature_engineering:
+    cmd: python ml/features/feature_engineering.py
+    deps:
+      - data/raw/azure
+      - ml/features/feature_engineering.py
+    outs:
+      - data/features/azure_features.parquet
+      - data/features/drift_baseline.csv
+
+  train:
+    cmd: python ml/training/train.py
+    deps:
+      - data/features/azure_features.parquet
+      - data/features/drift_baseline.csv
+      - ml/training/train.py
+    metrics:
+      - ml/training/metrics.json:
+          cache: false
