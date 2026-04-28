@@ -110,6 +110,7 @@ services:
       - "9090:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml
     restart: always
 
   grafana:
@@ -136,6 +137,13 @@ services:
       - ./mlflow-data:/mlflow-data
     depends_on:
       - mlflow
+    restart: always
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
     restart: always
 
 volumes:

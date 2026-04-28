@@ -1,0 +1,58 @@
+{
+  "title": "Predictive Maintenance - API Metrics",
+  "uid": "pdm-main",
+  "panels": [
+    {
+      "title": "Total Prediction Requests",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "sum(pdm_prediction_requests_total)", "legendFormat": "Total Requests"}],
+      "datasource": "Prometheus"
+    },
+    {
+      "title": "Model Loaded",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "pdm_model_loaded", "legendFormat": "Model Loaded"}],
+      "datasource": "Prometheus"
+    },
+    {
+      "title": "Failure Predictions",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "sum(pdm_failure_predictions_total{predicted=\"True\"})", "legendFormat": "Failure Alerts"}],
+      "datasource": "Prometheus"
+    },
+    {
+      "title": "Drift Detected",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "targets": [{"expr": "pdm_drift_detected{feature=\"any\"}", "legendFormat": "Drift"}],
+      "datasource": "Prometheus"
+    },
+    {
+      "title": "Prediction Latency (p95)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [{"expr": "histogram_quantile(0.95, rate(pdm_prediction_latency_seconds_bucket[5m]))", "legendFormat": "p95 latency"}],
+      "datasource": "Prometheus"
+    },
+    {
+      "title": "Request Rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [{"expr": "rate(pdm_prediction_requests_total[5m])", "legendFormat": "{{endpoint}} {{status}}"}],
+      "datasource": "Prometheus"
+    },
+    {
+      "title": "Error Rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+      "targets": [{"expr": "rate(pdm_prediction_requests_total{status=\"error\"}[5m]) / rate(pdm_prediction_requests_total[5m])", "legendFormat": "Error Rate"}],
+      "datasource": "Prometheus"
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s"
+}

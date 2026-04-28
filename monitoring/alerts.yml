@@ -1,0 +1,26 @@
+groups:
+  - name: pdm_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: rate(pdm_prediction_requests_total{status="error"}[5m]) / rate(pdm_prediction_requests_total[5m]) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Error rate above 5%"
+
+      - alert: DriftDetected
+        expr: pdm_drift_detected{feature="any"} == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Data drift detected"
+
+      - alert: ModelNotLoaded
+        expr: pdm_model_loaded == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Model not loaded"
